@@ -64,6 +64,7 @@
 
   .screen {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 18px 20px;
     cursor: text;
@@ -105,7 +106,9 @@
   }
 
   #commandInput {
-    position: absolute;
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 1px;
     height: 1px;
     opacity: 0;
