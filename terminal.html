@@ -1,0 +1,351 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive Terminal</title>
+
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: #050505;
+    font-family: Consolas, "Courier New", monospace;
+  }
+
+  .terminal {
+    width: min(850px, 100%);
+    height: 440px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #242a27;
+    border-radius: 12px;
+    background: #0a0a0b;
+    box-shadow: 0 0 35px #00ff9c0b;
+    color: #00ff9c;
+  }
+
+  .titlebar {
+    height: 42px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+    background: #0a0a0b;
+    border-bottom: 1px solid #242a27;
+    position: relative;
+  }
+
+  .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+  }
+
+  .red { background: #ff5f57; opacity: 0.55;}
+  .yellow { background: #febc2e; opacity: 0.55;}
+  .green { background: #28c840; opacity: 0.55;}
+
+  .title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #747b75;
+    font: 12px Arial, sans-serif;
+  }
+
+  .screen {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px;
+    cursor: text;
+    scrollbar-color: #26382e #080b09;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .output {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: #b7c9bd;
+    margin: 0 0 8px;
+  }
+
+  .command-line {
+    display: flex;
+    align-items: baseline;
+    min-height: 23px;
+    gap: 9px;
+  }
+
+  .prompt {
+    flex-shrink: 0;
+    color: #00ff9c;
+  }
+
+  .typed-command {
+    color: #e4eee7;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .input-area {
+    display: inline-flex;
+    align-items: baseline;
+    flex: 1;
+    min-width: 0;
+  }
+
+  #commandInput {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .live-text {
+    color: #e4eee7;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    margin-left: 1px;
+    background: #e7e7ea;
+    vertical-align: 0px;
+    animation: blink 1s steps(2, start) infinite;
+  }
+
+  @keyframes blink {
+    to { visibility: hidden; }
+  }
+
+  .screen:focus-within .cursor {
+    animation: blink 1s steps(2, start) infinite;
+  }
+
+  .hint {
+    color: #53665a;
+    font-size: 12px;
+    margin-top: 12px;
+  }
+
+  @media (max-width: 500px) {
+    .terminal { height: 75vh; }
+    .screen { padding: 14px; font-size: 12px; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="terminal">
+  <div class="titlebar">
+    <span class="dot red"></span>
+    <span class="dot yellow"></span>
+    <span class="dot green"></span>
+    <span class="title">abhineeth@portfolio: ~</span>
+  </div>
+
+  <div class="screen" id="screen" tabindex="0"
+       role="application" aria-label="Interactive terminal">
+    <div id="history"></div>
+
+    <div class="command-line" id="activeLine">
+      <span class="prompt">$</span>
+      <span class="input-area">
+        <span class="live-text" id="liveText"></span><span class="cursor" id="cursor"></span>
+      </span>
+    </div>
+
+    <input id="commandInput" autocomplete="off"
+           autocapitalize="off" spellcheck="false"
+           aria-label="Enter terminal command">
+
+    <div class="hint">Type "help" to see available commands.</div>
+  </div>
+</div>
+
+<script>
+  const screen = document.getElementById("screen");
+  const history = document.getElementById("history");
+  const input = document.getElementById("commandInput");
+  const liveText = document.getElementById("liveText");
+  const activeLine = document.getElementById("activeLine");
+
+  let commandHistory = [];
+  let historyIndex = 0;
+
+  const commands = {
+    help() {
+      return `Available commands:
+
+  help       Show available commands
+  whoami     About the developer
+  skills     Technical interests
+  anime      My updated top 10 anime list
+  mal        MyAnimeList profile
+  github     GitHub profile
+  clear      Clear the terminal
+  date       Show the current date`;
+    },
+
+    whoami() {
+      return "Developer and cybersecurity enthusiast exploring software, security, and AI.";
+    },
+
+    skills() {
+      return "Python | Java | C# | Git | Linux | Cybersecurity | AI security";
+    },
+
+    github() {
+      return "GitHub: https://github.com/abhineeth817";
+    },
+
+    date() {
+      return new Date().toString();
+    },
+
+    async anime() {
+      let response = await fetch("info.json");
+
+      if (!response.ok) {
+        return "Error fetching anime list.";
+      }
+      let data = await response.json();
+      
+      return data.anime.join("\n");
+    },
+
+    mal() {
+      return "MyAnimeList: https://myanimelist.net/profile/abhineeth817";
+    }
+  };
+
+  function scrollToBottom() {
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function addOutput(text, className = "output") {
+    const output = document.createElement("div");
+    output.className = className;
+    output.textContent = text;
+    history.appendChild(output);
+  }
+
+  async function asyncSubmitCommand(raw) {
+    const command = raw.trim();
+    if (!command) return;
+
+    commandHistory.push(raw);
+    historyIndex = commandHistory.length;
+
+    const entered = document.createElement("div");
+    entered.className = "command-line";
+
+    const prompt = document.createElement("span");
+    prompt.className = "prompt";
+    prompt.textContent = "$";
+
+    const text = document.createElement("span");
+    text.className = "typed-command";
+    text.textContent = raw;
+
+    entered.append(prompt, text);
+    history.appendChild(entered);
+
+    const [name, ...args] = command.split(/\s+/);
+    const cmd = name.toLowerCase();
+
+    if (cmd === "clear") {
+      history.replaceChildren();
+    } else if (cmd === "echo") {
+      addOutput(args.join(" "));
+    } else if (commands[cmd]) {
+      try{
+        let result = await commands[cmd]();
+        if (result !== undefined && result !=="") {
+          addOutput(result);
+        }
+      }
+      catch (error) {
+        addOutput(`Error executing command: ${error.message}`);
+        return;
+      }
+    } else {
+      addOutput(`Command not found: ${name}\nType "help" for available commands.`);
+    }
+
+    liveText.textContent = "";
+    input.value = "";
+    scrollToBottom();
+  }
+
+  input.addEventListener("input", () => {
+    liveText.textContent = input.value;
+    scrollToBottom();
+  });
+
+  input.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      asyncSubmitCommand(input.value);
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (historyIndex > 0) {
+        historyIndex--;
+        input.value = commandHistory[historyIndex];
+        liveText.textContent = input.value;
+      }
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (historyIndex < commandHistory.length - 1) {
+        historyIndex++;
+        input.value = commandHistory[historyIndex];
+      } else {
+        historyIndex = commandHistory.length;
+        input.value = "";
+      }
+      liveText.textContent = input.value;
+    }
+
+    if (event.key === "Tab") {
+      event.preventDefault();
+      const partial = input.value.toLowerCase();
+      const match = Object.keys(commands)
+        .concat(["echo"])
+        .find(command => command.startsWith(partial));
+
+      if (match) {
+        input.value = match;
+        liveText.textContent = match;
+      }
+    }
+  });
+
+  screen.addEventListener("click", () => input.focus());
+
+  // Focus the terminal when the page opens.
+  input.focus();
+  addOutput("Welcome to Abhineeth's interactive terminal.");
+  addOutput('Type "help" to explore.');
+</script>
+
+</body>
+</html>
